@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>算力租用回本期分析</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --hover: rgba(11,11,11,0.05);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+  --s4: #eda100; --s5: #e87ba4; --s6: #008300;
+  --s7: #4a3aa7; --s8: #e34948; --s9: #898781;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --grid: #2c2c2a; --axis: #383835;
+    --border: rgba(255,255,255,0.10); --hover: rgba(255,255,255,0.06);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --s4: #c98500; --s5: #d55181; --s6: #008300;
+    --s7: #9085e9; --s8: #e66767; --s9: #898781;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+  --grid: #2c2c2a; --axis: #383835;
+  --border: rgba(255,255,255,0.10); --hover: rgba(255,255,255,0.06);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+  --s4: #c98500; --s5: #d55181; --s6: #008300;
+  --s7: #9085e9; --s8: #e66767; --s9: #898781;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif;
+  line-height: 1.5;
+}
+main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 48px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--text-secondary); font-size: 14px; margin: 0 0 24px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px; margin-bottom: 20px;
+}
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
+.toolbar .label { font-size: 13px; color: var(--text-secondary); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; padding: 2px; gap: 2px; }
+.seg button {
+  font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--text-secondary);
+  padding: 6px 12px; border-radius: 6px; cursor: pointer;
+}
+.seg button:hover { background: var(--hover); }
+.seg button[aria-pressed="true"] { background: var(--text-primary); color: var(--surface); }
+.chart-title { font-size: 15px; font-weight: 600; margin: 0; }
+.chart-desc { font-size: 13px; color: var(--text-secondary); margin: 2px 0 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--text-secondary); margin: 4px 0 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend svg { overflow: visible; }
+.chart-wrap { position: relative; width: 100%; }
+svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
+.tick text { fill: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.axis-title { fill: var(--text-secondary); font-size: 12px; }
+.pt-label { fill: var(--text-primary); font-size: 12px; pointer-events: none; }
+.pt-label .v { fill: var(--text-secondary); }
+.mark { stroke: var(--surface); stroke-width: 2; transition: opacity .15s; }
+.dim .mark-g:not(.active), .dim .pt-label:not(.active) { opacity: .25; }
+.pt-label.hidden { display: none; }
+.pt-label.hidden.peek, .dim .pt-label.hidden.active { display: inline; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.tooltip {
+  position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: var(--surface); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; font-size: 12px; min-width: 220px; max-width: 300px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12); z-index: 5;
+}
+.tooltip .t { font-weight: 600; font-size: 13px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.tooltip dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; }
+.tooltip dt { color: var(--text-muted); }
+.tooltip dd { margin: 0; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.tooltip .hl { font-weight: 600; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--text-secondary); font-weight: 600; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+th.num { text-align: right; }
+td a { color: var(--s1); }
+.note { font-size: 12px; color: var(--text-muted); margin-top: 12px; }
+h2 { font-size: 15px; margin: 0 0 12px; }
+</style>
+<main>
+  <h1>算力租用成本回收期分析</h1>
+  <p class="sub">算力供應商出租算力給 AI 模型廠的建置成本回收期（依 1GW 建造成本 ÷ 1GW 年營收推估）。更新於 2026/10/08。</p>
+
+  <section class="card">
+    <div class="toolbar">
+      <span class="label">分類方式</span>
+      <div class="seg" role="group" aria-label="分類方式">
+        <button type="button" data-mode="provider" aria-pressed="true">算力供應商</button>
+        <button type="button" data-mode="chip" aria-pressed="false">晶片供應商</button>
+      </div>
+    </div>
+    <p class="chart-title" id="chartTitle">建置成本回收期 × 消息時間（依算力供應商）</p>
+    <div class="legend" id="legend"></div>
+    <div class="chart-wrap" id="wrap">
+      <svg class="chart" id="chart" viewBox="0 0 960 460" role="img" aria-label="建置成本回收期散佈圖"></svg>
+      <div class="tooltip" id="tip"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>資料明細</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>序號</th><th>消息時間</th><th>算力租用方</th><th>算力供應商</th><th>晶片供應商</th><th>採用晶片</th>
+          <th class="num">年期</th><th class="num">運算容量</th><th class="num">合約金額</th>
+          <th class="num">1GW 對應營收</th><th class="num">1GW 建造成本</th><th class="num">建置回本期</th><th>資料來源</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <p class="note">金額單位依原始資料（美元「億」）。回本期 = 1GW 建造成本 ÷ 1GW 年營收。</p>
+  </section>
+</main>
+
+<script>
+const DATA = [
+ {
+  "no": "1",
+  "date": "2025-09",
+  "tenant": "OpenAI",
+  "provider": "Oracle",
+  "term": "5年",
+  "cap": "4.5 GW",
+  "amount": "3,000億",
+  "rev": "133億/年",
+  "cost": "467億",
+  "payback": 3.5,
+  "chip": "B200/B300/Vera Rubin",
+  "chipVendor": "NVIDIA",
+  "src": [
+   "甲骨文26Q3法說會推估：OpenAI 3,000億訂單，4.5GW，5年履約完畢"
+  ]
+ },
+ {
+  "no": "2",
+  "date": "2025-09",
+  "tenant": "Microsoft",
+  "provider": "Nebius",
+  "term": "5年",
+  "cap": "400 MW",
+  "amount": "194億",
+  "rev": "97億/年",
+  "cost": "471億",
+  "payback": 4.9,
+  "chip": "GB300",
+  "chipVendor": "NVIDIA",
+  "src": [
+   "https://www.datacenterdynamics.com/en/news/microsoft-to-use-nebius-gpu-data-centers-in-deal-worth-174bn-over-five-years/",
+   "https://finance.yahoo.com/news/microsoft-secures-100-000-nvidia-205000265.html"
+  ]
+ },
+ {
+  "no": "3",
+  "date": "2025-11",
+  "tenant": "Anthropic",
+  "provider": "Microsoft",
+  "term": "6.5年",
+  "cap": "1 GW",
+  "amount": "300億",
+  "rev": "46億/年",
+  "cost": "529億",
+  "payback": 11.5,
+  "chip": "GB300/Vera Rubin",
+  "chipVendor": "NVIDIA",
+  "src": [
+   "https://www.ithome.com.tw/news/172340"
+  ]
+ },
+ {
+  "no": "4",
+  "date": "2026-04",
+  "tenant": "Anthropic",
+  "provider": "AWS",
+  "term": "10年",
+  "cap": "5 GW",
+  "amount": "1000億",
+  "rev": "20億/年",
+  "cost": "214億",
+  "payback": 10.7,
+  "chip": "Trainium2/Trainium3/Trainium4",
+  "chipVendor": "Amazon",
+  "src": [
+   "https://www.ithome.com.tw/news/175195",
+   "https://www.anthropic.com/news/anthropic-amazon-compute"
+  ]
+ },
+ {
+  "no": "5",
+  "date": "2026-04",
+  "tenant": "Meta",
+  "provider": "CoreWeave",
+  "term": "6年",
+  "cap": "350 MW",
+  "amount": "352億",
+  "rev": "168億/年",
+  "cost": "529億",
+  "payback": 3.1,
+  "chip": "GB300/Vera Rubin",
+  "chipVendor": "NVIDIA",
+  "src": [
+   "https://www.forecastock.tw/article/cmoneyairesearcher-a603982f-34bd-11f1-8b10-a087928c2294",
+   "https://enkiai.com/data-center/meta-ai-compute-coreweave/"
+  ]
+ },
+ {
+  "no": "6",
+  "date": "2026-05",
+  "tenant": "Anthropic",
+  "provider": "Google",
+  "term": "5年",
+  "cap": "5 GW",
+  "amount": "2,000億",
+  "rev": "80億/年",
+  "cost": "386億",
+  "payback": 4.8,
+  "chip": "TPUv6~",
+  "chipVendor": "Google",
+  "src": [
+   "https://news.cnyes.com/news/id/6447091"
+  ]
+ },
+ {
+  "no": "7",
+  "date": "2026-08",
+  "tenant": "Anthropic",
+  "provider": "Nscale",
+  "term": "6年",
+  "cap": "460 MW",
+  "amount": "450億",
+  "rev": "163億/年",
+  "cost": "586億",
+  "payback": 3.6,
+  "chip": "Vera Rubin",
+  "chipVendor": "NVIDIA",
+  "src": [
+   "https://www.moomoo.com/hant/news/post/75322789/anthropic-invests-another-45-billion-accelerating-compute-capacity-accumulation-ahead?level=1&data_ticket=1782096902735221"
+  ]
+ },
+ {
+  "no": "8",
+  "date": "2026-08",
+  "tenant": "Anthropic",
+  "provider": "Lambda",
+  "term": "6年",
+  "cap": "350 MW",
+  "amount": "350億",
+  "rev": "167億/年",
+  "cost": "471億",
+  "payback": 2.8,
+  "chip": "多款GPU",
+  "chipVendor": "NVIDIA",
+  "src": [
+   "https://timeline.sohu.com/news/q7E0dm9G0j"
+  ]
+ }
+];
+
+// 固定色序 + 形狀做第二編碼（色盲友善）
+const SLOTS = ["--s1","--s2","--s3","--s4","--s5","--s6","--s7","--s8"];
+const SHAPES = ["circle","square","diamond","triangle","triangleDown","hexagon","pentagon","star"];
+const OTHER = "其他"; // 超過 8 類時，第 8 類之後併入「其他」（灰色、圓點）
+const MODES = {
+  provider: { key: "provider",   name: "算力供應商" },
+  chip:     { key: "chipVendor", name: "晶片供應商" },
+};
+let mode = "provider";
+
+const W = 960, H = 460, M = { l: 64, r: 120, t: 20, b: 56 };
+const svg = document.getElementById("chart");
+const tip = document.getElementById("tip");
+const wrap = document.getElementById("wrap");
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs = {}, parent) => {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+};
+const monthIdx = s => { const [y, m] = s.split("-").map(Number); return y * 12 + (m - 1); };
+const fmtMonth = i => `${Math.floor(i / 12)}/${(i % 12) + 1}`;
+
+const months = DATA.map(d => monthIdx(d.date));
+const xMin = Math.min(...months) - 1, xMax = Math.max(...months) + 1;
+const yMax = Math.max(4, Math.ceil((Math.max(...DATA.map(d => d.payback)) + 1) / 2) * 2);
+const xStep = Math.max(1, Math.ceil((xMax - xMin) / 8));
+const x = i => M.l + (i - xMin) / (xMax - xMin) * (W - M.l - M.r);
+const y = v => H - M.b - v / yMax * (H - M.t - M.b);
+
+function shapePath(shape, cx, cy, r) {
+  const pts = n => a0 => Array.from({ length: n }, (_, k) => {
+    const a = a0 + k * 2 * Math.PI / n;
+    return `${(cx + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)}`;
+  }).join(" ");
+  switch (shape) {
+    case "square":       return ["rect", { x: cx - r * .85, y: cy - r * .85, width: r * 1.7, height: r * 1.7, rx: 2 }];
+    case "diamond":      return ["polygon", { points: pts(4)(-Math.PI / 2).replace(/^/, "") }];
+    case "triangle":     return ["polygon", { points: pts(3)(-Math.PI / 2) }];
+    case "triangleDown": return ["polygon", { points: pts(3)(Math.PI / 2) }];
+    case "hexagon":      return ["polygon", { points: pts(6)(0) }];
+    case "pentagon":     return ["polygon", { points: pts(5)(-Math.PI / 2) }];
+    case "star": {
+      const p = Array.from({ length: 10 }, (_, k) => {
+        const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? r * .45 : r * 1.1;
+        return `${(cx + rr * Math.cos(a)).toFixed(1)},${(cy + rr * Math.sin(a)).toFixed(1)}`;
+      }).join(" ");
+      return ["polygon", { points: p }];
+    }
+    default:             return ["circle", { cx, cy, r: r * .9 }];
+  }
+}
+function allCats() {
+  const k = MODES[mode].key, seen = [];
+  DATA.forEach(d => { if (!seen.includes(d[k])) seen.push(d[k]); });
+  return seen;
+}
+function catOf(d) {
+  const c = d[MODES[mode].key], all = allCats();
+  return all.length > SLOTS.length && all.indexOf(c) >= SLOTS.length - 1 ? OTHER : c;
+}
+function categories() {
+  const seen = [];
+  DATA.forEach(d => { const c = catOf(d); if (!seen.includes(c)) seen.push(c); });
+  return seen;
+}
+function styleOf(cat) {
+  if (cat === OTHER) return { color: "var(--s9)", shape: "circle" };
+  const i = categories().indexOf(cat);
+  return { color: `var(${SLOTS[i]})`, shape: SHAPES[i] };
+}
+function miniMarker(cat, size = 14) {
+  const s = styleOf(cat);
+  const m = document.createElementNS(NS, "svg");
+  m.setAttribute("width", size); m.setAttribute("height", size);
+  m.setAttribute("viewBox", `0 0 ${size} ${size}`);
+  const [tag, a] = shapePath(s.shape, size / 2, size / 2, size / 2 - 1);
+  el(tag, { ...a, fill: s.color }, m);
+  return m;
+}
+
+function render() {
+  svg.innerHTML = "";
+  const k = MODES[mode].key;
+  document.getElementById("chartTitle").textContent = `建置成本回收期 × 消息時間（依${MODES[mode].name}）`;
+
+  // grid + y axis
+  const gy = el("g", { class: "tick" }, svg);
+  for (let v = 0; v <= yMax; v += 2) {
+    el("line", { x1: M.l, x2: W - M.r, y1: y(v), y2: y(v), stroke: v === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": 1 }, gy);
+    const t = el("text", { x: M.l - 10, y: y(v) + 4, "text-anchor": "end" }, gy);
+    t.textContent = v;
+  }
+  // x axis
+  const gx = el("g", { class: "tick" }, svg);
+  for (let i = xMin + 1; i <= xMax; i += xStep) {
+    el("line", { x1: x(i), x2: x(i), y1: H - M.b, y2: H - M.b + 5, stroke: "var(--axis)" }, gx);
+    const t = el("text", { x: x(i), y: H - M.b + 20, "text-anchor": "middle" }, gx);
+    t.textContent = fmtMonth(i);
+  }
+  el("text", { class: "axis-title", x: (M.l + W - M.r) / 2, y: H - 10, "text-anchor": "middle" }, svg).textContent = "消息時間";
+  el("text", { class: "axis-title", transform: `translate(18 ${(M.t + H - M.b) / 2}) rotate(-90)`, "text-anchor": "middle" }, svg).textContent = "建置回本期（年）";
+
+  // points
+  const gp = el("g", { id: "points" }, svg);
+  const pts = [];
+  DATA.forEach((d, idx) => {
+    const s = styleOf(catOf(d));
+    const cx = x(monthIdx(d.date)), cy = y(d.payback);
+    const g = el("g", { class: "mark-g", "data-cat": catOf(d), tabindex: 0 }, gp);
+    el("circle", { cx, cy, r: 18, fill: "transparent" }, g); // hit area
+    const [tag, a] = shapePath(s.shape, cx, cy, 8);
+    el(tag, { ...a, class: "mark", fill: s.color }, g);
+    pts.push({ d, cx, cy, cat: catOf(d), g });
+    g.addEventListener("mouseenter", () => { showTip(d, cx, cy); peekLabel(idx, true); });
+    g.addEventListener("focus", () => { showTip(d, cx, cy); peekLabel(idx, true); });
+    g.addEventListener("mouseleave", () => { hideTip(); peekLabel(idx, false); });
+    g.addEventListener("blur", () => { hideTip(); peekLabel(idx, false); });
+  });
+  placeLabels(pts);
+
+  // legend
+  const lg = document.getElementById("legend");
+  lg.innerHTML = "";
+  categories().forEach(c => {
+    const n = DATA.filter(d => catOf(d) === c).length;
+    const sp = document.createElement("span");
+    sp.appendChild(miniMarker(c));
+    sp.appendChild(document.createTextNode(`${c}（${n}）`));
+    sp.addEventListener("mouseenter", () => highlight(c));
+    sp.addEventListener("mouseleave", () => highlight(null));
+    lg.appendChild(sp);
+  });
+}
+
+// 標籤避讓：依序嘗試 8 個方位，挑第一個不撞到其他標籤、數據點、且不超出繪圖區的位置；
+// 都放不下就隱藏（滑鼠移到點上或圖例時再顯示）。新消息優先擺放。
+function placeLabels(pts) {
+  const gl = el("g", { id: "labels" }, svg);
+  const PAD = 3, R = 10, GAP = 13;
+  const boxes = pts.map(p => ({ x: p.cx - R, y: p.cy - R, w: 2 * R, h: 2 * R })); // 數據點佔位
+  const hit = (a, b) => a.x < b.x + b.w + PAD && b.x < a.x + a.w + PAD && a.y < b.y + b.h + PAD && b.y < a.y + a.h + PAD;
+  const inside = b => b.x >= M.l && b.x + b.w <= W - 4 && b.y >= 0 && b.y + b.h <= H - M.b;
+  const order = pts.map((p, i) => i).sort((a, b) => monthIdx(pts[b].d.date) - monthIdx(pts[a].d.date) || a - b);
+  order.forEach(i => {
+    const p = pts[i];
+    const lbl = el("text", { class: "pt-label", "data-idx": i, "data-cat": p.cat }, gl);
+    lbl.textContent = p.d.provider + " ";
+    el("tspan", { class: "v" }, lbl).textContent = p.d.payback + "年";
+    const bb = lbl.getBBox(), w = bb.width, h = bb.height;
+    // [anchor, dx, dy]：右、左、上、下、右上、右下、左上、左下
+    const cands = [
+      ["start", GAP, 4], ["end", -GAP, 4], ["middle", 0, -GAP - 2], ["middle", 0, GAP + 10],
+      ["start", GAP - 4, -GAP + 2], ["start", GAP - 4, GAP + 6], ["end", -GAP + 4, -GAP + 2], ["end", -GAP + 4, GAP + 6],
+    ];
+    let placed = false;
+    for (const [anc, dx, dy] of cands) {
+      const lx = p.cx + dx, ly = p.cy + dy;
+      const bx = anc === "start" ? lx : anc === "end" ? lx - w : lx - w / 2;
+      const box = { x: bx, y: ly - h * 0.8, w, h };
+      if (!inside(box) || boxes.some((b, j) => j !== i && hit(box, b))) continue;
+      lbl.setAttribute("x", lx); lbl.setAttribute("y", ly); lbl.setAttribute("text-anchor", anc);
+      boxes.push(box); placed = true; break;
+    }
+    if (!placed) {
+      lbl.setAttribute("x", p.cx + GAP); lbl.setAttribute("y", p.cy + 4);
+      if (p.cx + GAP + w > W - 4) { lbl.setAttribute("x", p.cx - GAP); lbl.setAttribute("text-anchor", "end"); }
+      lbl.classList.add("hidden");
+    }
+  });
+}
+function peekLabel(idx, on) {
+  const l = svg.querySelector(`.pt-label[data-idx="${idx}"]`);
+  if (l) l.classList.toggle("peek", on);
+}
+
+function highlight(cat) {
+  svg.classList.toggle("dim", !!cat);
+  svg.querySelectorAll(".mark-g, .pt-label").forEach(g => g.classList.toggle("active", g.dataset.cat === cat));
+}
+
+function showTip(d, cx, cy) {
+  const k = MODES[mode].key;
+  tip.innerHTML = "";
+  const t = document.createElement("div"); t.className = "t";
+  t.appendChild(miniMarker(catOf(d), 12));
+  t.appendChild(document.createTextNode(`${d.tenant} × ${d.provider}`));
+  tip.appendChild(t);
+  const dl = document.createElement("dl");
+  [["消息時間", d.date.replace("-", "/")], ["建置回本期", d.payback + " 年", true], ["晶片供應商", d.chipVendor],
+   ["採用晶片", d.chip], ["年期", d.term], ["運算容量", d.cap], ["合約金額", d.amount],
+   ["1GW 對應營收", d.rev], ["1GW 建造成本", d.cost]].forEach(([a, b, hl]) => {
+    const dt = document.createElement("dt"); dt.textContent = a;
+    const dd = document.createElement("dd"); dd.textContent = b; if (hl) dd.className = "hl";
+    dl.append(dt, dd);
+  });
+  tip.appendChild(dl);
+  const r = svg.getBoundingClientRect(), sc = r.width / W;
+  let left = cx * sc + 16, top = cy * sc - 20;
+  tip.style.opacity = 1;
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  if (left + tw > r.width) left = cx * sc - tw - 16;
+  if (left < 0) left = 4;
+  if (top + th > r.height) top = r.height - th;
+  if (top < 0) top = 0;
+  tip.style.left = left + "px"; tip.style.top = top + "px";
+}
+function hideTip() { tip.style.opacity = 0; }
+
+function renderTable() {
+  const tb = document.getElementById("tbody");
+  DATA.forEach(d => {
+    const tr = document.createElement("tr");
+    const cells = [d.no, d.date.replace("-", "/"), d.tenant, d.provider, d.chipVendor, d.chip, d.term, d.cap, d.amount, d.rev, d.cost, d.payback + " 年"];
+    cells.forEach((c, i) => {
+      const td = document.createElement("td"); td.textContent = c;
+      if (i >= 6) td.className = "num";
+      tr.appendChild(td);
+    });
+    const td = document.createElement("td");
+    d.src.forEach((s, i) => {
+      if (i) td.appendChild(document.createElement("br"));
+      if (s.startsWith("http")) {
+        const a = document.createElement("a"); a.href = s; a.target = "_blank"; a.rel = "noopener";
+        a.textContent = new URL(s).hostname; td.appendChild(a);
+      } else td.appendChild(document.createTextNode(s));
+    });
+    tr.appendChild(td);
+    tb.appendChild(tr);
+  });
+}
+
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  hideTip(); render();
+}));
+render(); renderTable();
+</script>
